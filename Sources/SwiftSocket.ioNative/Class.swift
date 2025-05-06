@@ -38,7 +38,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         components.queryItems = queryItems
 
         guard let fullURL = components.url else {
-            fatalError("URL inválida al construir WebSocket")
+            fatalError("Invalid URL when building WebSocket")
         }
 
         self.serverURL = fullURL
@@ -62,7 +62,6 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
         startPing()
-        isConnected = true
         if lastConnectionEvent != .connected {
             lastConnectionEvent = .connected
             onEvent?(.connected)
@@ -126,7 +125,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                         self.lastConnectionEvent = newEvent
                         self.onEvent?(newEvent)
                     }
-                    // Reconnect logic removed
+                    self.scheduleReconnect()
 
                 case .success(let message):
                     switch message {
@@ -146,11 +145,32 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private func handleTextMessage(_ text: String) {
         do {
             let message = try SocketMessage.decode(from: text)
-            if let handler = eventHandlers[message.event] {
-                handler(message.data)
-            } else {
-                print("⚠️ No handler for event:", message.event)
+
+            switch message.event {
+            case "__connected":
+                if lastConnectionEvent != .connected {
+                    lastConnectionEvent = .connected
+                    isConnected = true
+                    onEvent?(.connected)
+                }
+
+            case "__disconnected":
+                if lastConnectionEvent != .disconnected {
+                    lastConnectionEvent = .disconnected
+                    onEvent?(.disconnected)
+                }
+
+            case "__pong":
+                onEvent?(.pongReceived)
+
+            default:
+                if let handler = eventHandlers[message.event] {
+                    handler(message.data)
+                } else {
+                    print("⚠️ No handler for event:", message.event)
+                }
             }
+
         } catch {
             self.errorDelegate?.socketDidCatchError(.decodingFailed(event: "unknown", reason: error.localizedDescription))
         }
@@ -170,10 +190,10 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private func sendPing() {
         webSocket?.sendPing { error in
             if let error = error {
-                print("❌ Error al enviar ping:", error)
+                print("❌ Error sending ping:", error)
                 self.disconnect()
             } else {
-                print("✅ Ping enviado")
+                print("✅ Ping Sent")
             }
         }
     }
@@ -183,5 +203,13 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
             webSocket?.send(.string(msg)) { _ in }
         }
         messageQueue.removeAll()
+    }
+
+    @MainActor
+    private func scheduleReconnect() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay) {
+            self.connect(with: self.pendingUserId)
+            self.reconnectDelay = min(self.reconnectDelay * 2, 30)
+        }
     }
 }

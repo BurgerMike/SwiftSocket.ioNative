@@ -5,7 +5,7 @@ public struct SocketMessage: Codable, CustomStringConvertible {
     public let event: String
     public let data: CodableValue
     
-    private static let parserPrefix = "42"
+    private static let eventPrefix = "42"
 
     public init(event: String, data: CodableValue) {
         self.event = event
@@ -17,27 +17,35 @@ public struct SocketMessage: Codable, CustomStringConvertible {
         let encoder = JSONEncoder()
         let jsonData = try encoder.encode(wrapper)
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-            throw SocketError.encodingFailed(reason: "No se pudo convertir a string")
+            throw SocketError.encodingFailed(reason: "Could not convert to string")
         }
-        return Self.parserPrefix + jsonString
+        return Self.eventPrefix + jsonString
     }
 
     public static func decode(from text: String) throws -> SocketMessage {
-        guard text.hasPrefix(parserPrefix) else {
-            throw SocketError.decodingFailed(event: "unknown", reason: "No comienza con el prefijo esperado")
+        switch true {
+        case text == "40":
+            return SocketMessage(event: "__connected", data: .null)
+        case text == "41":
+            return SocketMessage(event: "__disconnected", data: .null)
+        case text == "3":
+            return SocketMessage(event: "__pong", data: .null)
+        case text.hasPrefix(eventPrefix):
+            let jsonPart = String(text.dropFirst(eventPrefix.count))
+            let decoder = JSONDecoder()
+            let decoded = try decoder.decode([CodableValue].self, from: Data(jsonPart.utf8))
+
+            guard decoded.count == 2,
+                  case let .string(event) = decoded[0] else {
+                throw SocketError.decodingFailed(event: "unknown", reason: "Message event could not be decoded")
+            }
+
+            let payload = decoded[1]
+            return SocketMessage(event: event, data: payload)
+
+        default:
+            throw SocketError.decodingFailed(event: "unknown", reason: "Unknown or unsupported prefix")
         }
-
-        let jsonPart = String(text.dropFirst(parserPrefix.count))
-        let decoder = JSONDecoder()
-        let decoded = try decoder.decode([CodableValue].self, from: Data(jsonPart.utf8))
-
-        guard decoded.count == 2,
-              case let .string(event) = decoded[0] else {
-            throw SocketError.decodingFailed(event: "unknown", reason: "No se pudo decodificar el evento del mensaje")
-        }
-
-        let payload = decoded[1]
-        return SocketMessage(event: event, data: payload)
     }
 
     public var description: String {

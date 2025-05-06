@@ -44,4 +44,9 @@ public protocol NativeSocketClient {
     func emit(event: SocketUserEvent, data: CodableValue)
     func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void)
     func off(event: String)
+    var onEvent: ((SocketConnectionEvent) -> Void)? { get set }
+    var isConnected: Bool { get }
 }
+
+/// Protocolo combinado que unifica todas las capacidades del cliente de socket
+public typealias FullSocketClient = NativeSocketClient & SocketEventEmitter & SocketEventListener & SocketErrorHandler
