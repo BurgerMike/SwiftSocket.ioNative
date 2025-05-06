@@ -14,6 +14,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private var authUserId: String?
 
     private var pingTimer: Timer?
+    private var lastConnectionEvent: SocketConnectionEvent?
 
     public var pendingUserId: String?
 
@@ -62,14 +63,20 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket?.resume()
         startPing()
         isConnected = true
-        onEvent?(.connected)
+        if lastConnectionEvent != .connected {
+            lastConnectionEvent = .connected
+            onEvent?(.connected)
+        }
         flushQueue()
         listen()
     }
 
     public func disconnect() {
         stopPing()
-        onEvent?(.disconnected)
+        if lastConnectionEvent != .disconnected {
+            lastConnectionEvent = .disconnected
+            onEvent?(.disconnected)
+        }
         webSocket?.cancel(with: .normalClosure, reason: nil)
         isConnected = false
     }
@@ -111,7 +118,14 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                 switch result {
                 case .failure(let error):
                     self.isConnected = false
-                    self.onEvent?(.connectionError(error.localizedDescription))
+                    let newEvent = SocketConnectionEvent.connectionError(error.localizedDescription)
+                    if case .connectionError(let lastReason) = self.lastConnectionEvent,
+                       lastReason == error.localizedDescription {
+                        // same error, don't re-emit
+                    } else {
+                        self.lastConnectionEvent = newEvent
+                        self.onEvent?(newEvent)
+                    }
                     // Reconnect logic removed
 
                 case .success(let message):
