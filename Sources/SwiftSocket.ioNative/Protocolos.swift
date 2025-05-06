@@ -5,37 +5,43 @@
 //  Created by Miguel Carlos Elizondo Martinez on 04/05/25.
 //
 
-
 import Foundation
 
+/// Delegado para eventos del socket como conexión, desconexión o errores
+public protocol SocketConnectionDelegate: AnyObject {
+    func socketDidConnect()
+    func socketDidDisconnect(error: Error?)
+    func socketDidReceiveError(_ error: SocketError)
+    func socketDidReceivePong()
+}
+
+/// Protocolo que define cómo emitir eventos personalizados
+public protocol SocketEventEmitter {
+    func emit(event: SocketUserEvent, data: CodableValue)
+}
+
+/// Protocolo que define cómo registrar eventos
+public protocol SocketEventListener {
+    func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void)
+}
+
+/// Errores posibles que puede emitir el cliente socket
+public enum SocketError: Error {
+    case encodingFailed(reason: String)
+    case decodingFailed(event: String, reason: String)
+    case connectionFailed(reason: String)
+}
+
+/// Protocolo para manejar errores desde el cliente socket
 public protocol SocketErrorHandler: AnyObject {
-    func socketDidCatchError(_ error: SocketIOError)
+    func socketDidCatchError(_ error: SocketError)
 }
 
+/// Protocolo base que define las operaciones estándar de un cliente de socket
 public protocol NativeSocketClient {
-    var isConnected: Bool { get }
-    var pendingUserId: String? { get set }
-    func connect()
+    func connect(with userId: String?)
     func disconnect()
-    func emit<T: Encodable>(event: String, data: T)
-    func on<T: Decodable>(event: String, callback: @escaping (T) -> Void)
+    func emit(event: SocketUserEvent, data: CodableValue)
+    func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void)
     func off(event: String)
-    func authenticate(with userId: String)
-    var onConnect: (() -> Void)? { get set }
-    var onDisconnect: ((Error?) -> Void)? { get set }
-    var errorDelegate: SocketErrorHandler? { get set }
-    init(baseURL: URL, path: String, queryItems: [URLQueryItem])
-}
-
-public protocol SocketPayload: Encodable {
-    var eventName: String { get }
-}
-
-public protocol SocketReceivable: SocketPayload {}
-public protocol SocketEmittable: SocketPayload {}
-
-public protocol SocketIOCodablePacket {
-    var code: Int { get }
-    var description: String { get }
-    init?(rawCode: Int)
 }

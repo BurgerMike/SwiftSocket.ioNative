@@ -1,12 +1,11 @@
 import Foundation
 
 
-private struct AuthPayload: Codable {
-    let userId: String
-}
-
-
 public final class SwiftNativeSocketIOClient: NativeSocketClient {
+    
+    private var messageQueue: [String] = []
+    private var reconnectDelay: TimeInterval = 2.0
+
     private var webSocket: URLSessionWebSocketTask?
     private let serverURL: URL
     private var session: URLSession
@@ -14,17 +13,20 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private var eventHandlers: [String: (Any) -> Void] = [:]
     private var authUserId: String?
 
+    private var pingTimer: Timer?
+
     public var pendingUserId: String?
 
-    public var onConnect: (() -> Void)?
-    public var onDisconnect: ((Error?) -> Void)?
+    public var onEvent: ((SocketConnectionEvent) -> Void)?
     public weak var errorDelegate: SocketErrorHandler?
+    private let id: Int
     private let baseURL: URL
     private let path: String
     private let queryItems: [URLQueryItem]
     
 
-    public init(baseURL: URL, path: String, queryItems: [URLQueryItem]) {
+    public init(id: Int, baseURL: URL, path: String, queryItems: [URLQueryItem], authUserId: String? = nil) {
+        self.id = id
         self.baseURL = baseURL
         self.path = path
         self.queryItems = queryItems
@@ -40,74 +42,59 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
         self.serverURL = fullURL
         self.session = URLSession(configuration: .default)
+        self.authUserId = authUserId
+        self.pendingUserId = authUserId
     }
-
-    public func connect() {
+    public func connect(with userId: String?) {
         var request = URLRequest(url: serverURL)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
+        if let userId = userId {
+            let authPayload = ["userId": userId]
+            if let jsonData = try? JSONSerialization.data(withJSONObject: authPayload),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                request.addValue(jsonString, forHTTPHeaderField: "auth")
+            }
+        }
+
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
+        startPing()
         isConnected = true
-        onConnect?()
+        onEvent?(.connected)
+        flushQueue()
         listen()
-
-        if let userId = pendingUserId {
-            sendInitialAuth(userId: userId)
-            pendingUserId = nil
-        }
     }
 
     public func disconnect() {
-        onDisconnect?(nil)
+        stopPing()
+        onEvent?(.disconnected)
         webSocket?.cancel(with: .normalClosure, reason: nil)
         isConnected = false
     }
 
-    public func authenticate(with userId: String) {
-        authUserId = userId
-        pendingUserId = userId
-        if isConnected {
-            sendInitialAuth(userId: userId)
-        }
-    }
-
-    private func sendInitialAuth(userId: String) {
-        let payload = SocketEmitPayload(event: "auth", data: AuthPayload(userId: userId))
-        emit(payload)
-    }
-
-    public func emit<T: Encodable>(event: String, data: T)
-    {      let payload = SocketEmitPayload(event: event, data: data)
-        emit(payload)
-    }
-
-    public func emit<T: SocketEmittable>(_ payload: T) {
+    public func emit(event: SocketUserEvent, data: CodableValue) {
         do {
-            let encoded = try JSONEncoder().encode(payload)
-            if let jsonString = String(data: encoded, encoding: .utf8) {
-                let wrapped = "[\"\(payload.eventName)\", \(jsonString)]"
-                let socketMessage = "42" + wrapped
-                webSocket?.send(.string(socketMessage)) { error in
+            let message = try SocketMessage(event: event.name, data: data).encodedString()
+            if isConnected {
+                webSocket?.send(.string(message)) { error in
                     if let error = error {
                         self.errorDelegate?.socketDidCatchError(.encodingFailed(reason: error.localizedDescription))
                     }
                 }
+            } else {
+                messageQueue.append(message)
             }
         } catch {
             self.errorDelegate?.socketDidCatchError(.encodingFailed(reason: error.localizedDescription))
         }
     }
 
-    public func on<T: Decodable>(event: String, callback: @escaping (T) -> Void) {
-        eventHandlers[event] = { raw in
-            do {
-                let data = try JSONSerialization.data(withJSONObject: raw)
-                let decoded = try JSONDecoder().decode(T.self, from: data)
-                callback(decoded)
-            } catch {
-                self.errorDelegate?.socketDidCatchError(.decodingFailed(event: event, reason: error.localizedDescription))
+    public func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void) {
+        eventHandlers[event.name] = { raw in
+            if let value = raw as? CodableValue {
+                callback(value)
             }
         }
     }
@@ -120,42 +107,67 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket?.receive { [weak self] result in
             guard let self = self else { return }
 
-            switch result {
-            case .failure(let error):
-                self.isConnected = false
-                self.errorDelegate?.socketDidCatchError(.connectionFailed(reason: error.localizedDescription))
-                self.onDisconnect?(error)
+            DispatchQueue.main.async {
+                switch result {
+                case .failure(let error):
+                    self.isConnected = false
+                    self.onEvent?(.connectionError(error.localizedDescription))
+                    // Reconnect logic removed
 
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    self.handleTextMessage(text)
-                default:
-                    break
+                case .success(let message):
+                    switch message {
+                    case .string(let text):
+                        self.handleTextMessage(text)
+                    default:
+                        break
+                    }
                 }
+
+                // Siempre volvemos a escuchar
                 self.listen()
             }
         }
     }
 
     private func handleTextMessage(_ text: String) {
-        guard text.hasPrefix("42"),
-              let jsonStart = text.firstIndex(of: "[") else {
-            self.errorDelegate?.socketDidCatchError(.unknown(message: "Received message without expected prefix or format"))
-            return
+        do {
+            let message = try SocketMessage.decode(from: text)
+            if let handler = eventHandlers[message.event] {
+                handler(message.data)
+            } else {
+                print("⚠️ No handler for event:", message.event)
+            }
+        } catch {
+            self.errorDelegate?.socketDidCatchError(.decodingFailed(event: "unknown", reason: error.localizedDescription))
         }
+    }
 
-        let payload = String(text[jsonStart...])
-        guard let data = payload.data(using: .utf8),
-              let array = try? JSONSerialization.jsonObject(with: data) as? [Any],
-              array.count == 2,
-              let event = array[0] as? String else {
-            self.errorDelegate?.socketDidCatchError(.unknown(message: "Failed to parse incoming socket message"))
-            return
+    private func startPing() {
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
+            self?.sendPing()
         }
+    }
 
-        let body = array[1]
+    private func stopPing() {
+        pingTimer?.invalidate()
+        pingTimer = nil
+    }
 
-        eventHandlers[event]?(body)
+    private func sendPing() {
+        webSocket?.sendPing { error in
+            if let error = error {
+                print("❌ Error al enviar ping:", error)
+                self.disconnect()
+            } else {
+                print("✅ Ping enviado")
+            }
+        }
+    }
+
+    private func flushQueue() {
+        for msg in messageQueue {
+            webSocket?.send(.string(msg)) { _ in }
+        }
+        messageQueue.removeAll()
     }
 }
