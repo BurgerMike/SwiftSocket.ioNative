@@ -32,6 +32,14 @@ public enum SocketError: Error {
     case connectionFailed(reason: String)
 }
 
+/// Delegado nativo para manejar eventos estándar del socket como conexión, recepción de eventos, desconexión y errores
+public protocol NativeSocketDelegate: AnyObject {
+    func socketDidConnect()
+    func socketDidDisconnect(error: Error?)
+    func socketDidReceive(event: String, data: Data)
+    func socketDidCatchError(_ error: Error)
+}
+
 /// Protocolo para manejar errores desde el cliente socket
 public protocol SocketErrorHandler: AnyObject {
     func socketDidCatchError(_ error: SocketError)

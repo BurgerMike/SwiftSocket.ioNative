@@ -15,6 +15,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
     private var pingTimer: Timer?
     private var lastConnectionEvent: SocketConnectionEvent?
+    private var hasConnectedOnce = false
 
     public var pendingUserId: String?
 
@@ -62,7 +63,8 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
         startPing()
-        if lastConnectionEvent != .connected {
+        if lastConnectionEvent != .connected && !hasConnectedOnce {
+            hasConnectedOnce = true
             lastConnectionEvent = .connected
             onEvent?(.connected)
         }
@@ -148,17 +150,17 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
             switch message.event {
             case "__connected":
-                if lastConnectionEvent != .connected {
-                    lastConnectionEvent = .connected
-                    isConnected = true
-                    onEvent?(.connected)
-                }
+                guard !hasConnectedOnce || lastConnectionEvent != .connected else { return }
+                hasConnectedOnce = true
+                lastConnectionEvent = .connected
+                isConnected = true
+                onEvent?(.connected)
 
             case "__disconnected":
-                if lastConnectionEvent != .disconnected {
-                    lastConnectionEvent = .disconnected
-                    onEvent?(.disconnected)
-                }
+                guard lastConnectionEvent != .disconnected else { return }
+                lastConnectionEvent = .disconnected
+                isConnected = false
+                onEvent?(.disconnected)
 
             case "__pong":
                 onEvent?(.pongReceived)

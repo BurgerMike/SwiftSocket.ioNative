@@ -25,10 +25,13 @@ public struct SocketMessage: Codable, CustomStringConvertible {
     public static func decode(from text: String) throws -> SocketMessage {
         switch true {
         case text == "40":
+            // Evento especial: conexión establecida (único al conectarse)
             return SocketMessage(event: "__connected", data: .null)
         case text == "41":
+            // Evento especial: desconexión (único al cerrarse)
             return SocketMessage(event: "__disconnected", data: .null)
         case text == "3":
+            // Evento especial: pong de latido (heartbeat)
             return SocketMessage(event: "__pong", data: .null)
         case text.hasPrefix(eventPrefix):
             let jsonPart = String(text.dropFirst(eventPrefix.count))
@@ -50,6 +53,28 @@ public struct SocketMessage: Codable, CustomStringConvertible {
 
     public var description: String {
         return "📨 SocketMessage(event: \(event), data: \(data))"
+    }
+}
+
+/// Payload de un mensaje de chat simple
+public struct ChatMessage: Codable {
+    public let groupId: Int
+    public let content: String
+
+    public init(groupId: Int, content: String) {
+        self.groupId = groupId
+        self.content = content
+    }
+}
+
+/// Contenedor genérico para enviar evento tipo socket.io
+public struct EmitMessage<T: Codable>: Codable {
+    public let event: String
+    public let data: T
+
+    public init(event: String, data: T) {
+        self.event = event
+        self.data = data
     }
 }
 
