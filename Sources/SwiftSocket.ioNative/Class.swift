@@ -9,18 +9,53 @@ private func log(_ title: String, error: Error? = nil) {
     }
 }
 
+private class SocketEventHandler {
+    private var handlers: [String: (Any) -> Void] = [:]
+
+    func register(event: String, handler: @escaping (CodableValue) -> Void) {
+        handlers[event] = { raw in
+            if let value = raw as? CodableValue {
+                handler(value)
+            }
+        }
+    }
+
+    func unregister(event: String) {
+        handlers.removeValue(forKey: event)
+    }
+
+    func trigger(event: String, with data: Any) {
+        handlers[event]?(data)
+    }
+}
+
+private class SocketReconnectStrategy {
+    private var attempts: Int = 0
+    private let maxDelay: TimeInterval = 30
+
+    var delay: TimeInterval {
+        return min(pow(2.0, Double(attempts)), maxDelay)
+    }
+
+    func reset() {
+        attempts = 0
+    }
+
+    func increase() {
+        attempts += 1
+    }
+}
+
 public final class SwiftNativeSocketIOClient: NativeSocketClient {
     
     private var messageQueue: [String] = []
-    private var reconnectDelay: TimeInterval = 2.0
-    private var reconnectAttempts: Int = 0
-    private let maxReconnectDelay: TimeInterval = 30
+    private var reconnectStrategy = SocketReconnectStrategy()
 
     private var webSocket: URLSessionWebSocketTask?
     private let serverURL: URL
     private var session: URLSession
     private(set) public var isConnected: Bool = false
-    private var eventHandlers: [String: (Any) -> Void] = [:]
+    private var eventHandler = SocketEventHandler()
     private var authUserId: String?
 
     private var pingTimer: Timer?
@@ -99,7 +134,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket?.cancel(with: .normalClosure, reason: nil)
         webSocket = nil
         isConnected = false
-        reconnectAttempts = 0
+        reconnectStrategy.reset()
     }
 
     public func emit(event: SocketUserEvent, data: CodableValue) {
@@ -127,15 +162,11 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     }
 
     public func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void) {
-        eventHandlers[event.name] = { raw in
-            if let value = raw as? CodableValue {
-                callback(value)
-            }
-        }
+        eventHandler.register(event: event.name, handler: callback)
     }
 
     public func off(event: String) {
-        eventHandlers.removeValue(forKey: event)
+        eventHandler.unregister(event: event)
     }
 
     private func listen() {
@@ -183,7 +214,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                 lastConnectionEvent = .connected
                 isConnected = true
                 onEvent?(.connected)
-                reconnectAttempts = 0
+                reconnectStrategy.reset()
 
             case "__disconnected":
                 guard lastConnectionEvent != .disconnected else { return }
@@ -195,11 +226,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                 onEvent?(.pongReceived)
 
             default:
-                if let handler = eventHandlers[message.event] {
-                    handler(message.data)
-                } else {
-                    print("⚠️ No handler for event:", message.event)
-                }
+                eventHandler.trigger(event: message.event, with: message.data)
             }
 
         } catch {
@@ -238,9 +265,9 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
     @MainActor
     private func scheduleReconnect() {
-        reconnectAttempts += 1
-        reconnectDelay = min(pow(2.0, Double(reconnectAttempts)), maxReconnectDelay)
-        DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay) {
+        reconnectStrategy.increase()
+        let delay = reconnectStrategy.delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             print("🔁 Intentando reconectar...")
             self.connect(with: self.pendingUserId)
         }

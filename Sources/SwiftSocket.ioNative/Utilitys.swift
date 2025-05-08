@@ -5,27 +5,45 @@
 //  Created by Miguel Carlos Elizondo Martinez on 07/05/25.
 //
 
-
 import Foundation
 
-/// Codifica un valor codificable a JSON Data
-public func encodeToJSON<T: Encodable>(_ value: T) -> Data? {
-    try? JSONEncoder().encode(value)
+public enum SocketUtils {
+
+    /// Codifica un valor codificable a JSON Data
+    public static func encodeToJSON<T: Codable>(_ value: T) -> Data? {
+        try? JSONEncoder().encode(value)
+    }
+
+    /// Decodifica un JSON Data a un tipo decodificable
+    public static func decodeFromJSON<T: Codable>(_ type: T.Type, from data: Data) -> T? {
+        try? JSONDecoder().decode(type, from: data)
+    }
+
+    /// Devuelve la fecha ISO8601 actual como String
+    public static func currentISO8601Timestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    /// Imprime un log solo en modo debug
+    public static func debugLog(_ message: @autoclosure () -> String) {
+    #if DEBUG
+        print("🧩", message())
+    #endif
+    }
 }
 
-/// Decodifica un JSON Data a un tipo decodificable
-public func decodeFromJSON<T: Decodable>(_ type: T.Type, from data: Data) -> T? {
-    try? JSONDecoder().decode(T.self, from: data)
-}
+// MARK: - CodableValue extension for JSON encoding
 
-/// Devuelve la fecha ISO8601 actual como String
-public func currentISO8601Timestamp() -> String {
-    ISO8601DateFormatter().string(from: Date())
-}
-
-/// Imprime un log solo en modo debug
-public func debugLog(_ message: @autoclosure () -> String) {
-#if DEBUG
-    print("🧩", message())
-#endif
+public extension CodableValue {
+    /// Codifica el `CodableValue` en una cadena JSON
+    func encodedJSONString() throws -> String {
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(self)
+        guard let jsonString = String(data: data, encoding: .utf8) else {
+            throw NSError(domain: "CodableValue", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "No se pudo convertir el JSON a String"
+            ])
+        }
+        return jsonString
+    }
 }

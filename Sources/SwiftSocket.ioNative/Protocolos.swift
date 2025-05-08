@@ -51,3 +51,20 @@ public enum SocketError: Error {
     case decodingFailed(event: String, reason: String)
     case connectionFailed(reason: String)
 }
+
+
+public enum SocketConnectionEvent: Equatable, CustomStringConvertible, Codable {
+    case connected
+    case disconnected
+    case connectionError(String)
+    case pongReceived
+    
+    public var description: String {
+        switch self {
+        case .connected: return "✅ Connected"
+        case .disconnected: return "🔌 Disconnected"
+        case .pongReceived: return "💓 Pong Received"
+        case .connectionError(let reason): return "❌ Connection Error: \(reason)"
+        }
+    }
+}

@@ -143,9 +143,3 @@ public enum CodableValue: Codable {
         }
     }
 }
-
-struct SocketParsedMessage {
-    let code: Int
-    let event: String?
-    let data: CodableValue?
-}

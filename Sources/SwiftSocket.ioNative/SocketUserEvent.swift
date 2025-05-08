@@ -1,41 +1,12 @@
+//
+//  SocketUserEvent.swift
+//  SwiftSocket.ioNative
+//
+//  Created by Miguel Carlos Elizondo Martinez on 08/05/25.
+//
+
 import Foundation
 
-/// Eventos internos de conexión con contexto opcional
-public enum SocketConnectionEvent: Equatable, CustomStringConvertible, Codable {
-    case connected
-    case disconnected
-    case connectionError(String)
-    case pongReceived
-
-    public var description: String {
-        switch self {
-        case .connected: return "✅ Connected"
-        case .disconnected: return "🔌 Disconnected"
-        case .pongReceived: return "💓 Pong Received"
-        case .connectionError(let reason): return "❌ Connection Error: \(reason)"
-        }
-    }
-}
-
-/// Estado general del socket
-public enum SocketState: String, Codable {
-    case disconnected
-    case connecting
-    case connected
-    case reconnecting
-    case failed
-}
-
-/// Tipo de mensaje intercambiado entre cliente y servidor
-public enum SocketMessageType: String, Codable {
-    case event
-    case ack
-    case error
-    case ping
-    case pong
-}
-
-/// Eventos de usuario emitibles o escuchables
 public enum SocketUserEvent: Hashable, CustomStringConvertible, Codable, RawRepresentable {
     case message
     case chatStarted
