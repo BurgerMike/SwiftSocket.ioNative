@@ -1,5 +1,13 @@
 import Foundation
 
+private func log(_ title: String, error: Error? = nil) {
+    if let error = error {
+        print("❌ \(title): \(error.localizedDescription)")
+        print("🔎 Debug error: \(error)")
+    } else {
+        print("📘 \(title)")
+    }
+}
 
 public final class SwiftNativeSocketIOClient: NativeSocketClient {
     
@@ -55,6 +63,8 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
 
+        log("📡 Conectando con userId: \(userId ?? "nil") a URL: \(serverURL)")
+
         if let userId = userId {
             let authPayload = ["userId": userId]
             if let jsonData = try? JSONSerialization.data(withJSONObject: authPayload),
@@ -83,11 +93,13 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     }
 
     public func emit(event: SocketUserEvent, data: CodableValue) {
+        log("📤 Emitiendo evento: \(event.name) con datos: \(data)")
         do {
             let message = try SocketMessage(event: event.name, data: data).encodedString()
             if isConnected {
                 webSocket?.send(.string(message)) { error in
                     if let error = error {
+                        log("❌ Error al enviar mensaje", error: error)
                         self.errorDelegate?.socketDidCatchError(.encodingFailed(reason: error.localizedDescription))
                     }
                 }
@@ -127,6 +139,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                         self.lastConnectionEvent = newEvent
                         self.onEvent?(newEvent)
                     }
+                    log("❌ Error en recepción WebSocket", error: error)
                     self.scheduleReconnect()
 
                 case .success(let message):
@@ -193,10 +206,10 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private func sendPing() {
         webSocket?.sendPing { error in
             if let error = error {
-                print("❌ Error sending ping:", error)
+                log("❌ Error al enviar ping", error: error)
                 self.disconnect()
             } else {
-                print("✅ Ping Sent")
+                log("✅ Ping enviado correctamente")
             }
         }
     }
