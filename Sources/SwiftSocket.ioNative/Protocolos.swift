@@ -7,45 +7,31 @@
 
 import Foundation
 
-/// Delegado para eventos del socket como conexión, desconexión o errores
+/// Delegado para eventos del socket como conexión, desconexión, mensajes y errores
 public protocol SocketConnectionDelegate: AnyObject {
-    func socketDidConnect()
-    func socketDidDisconnect(error: Error?)
-    func socketDidReceiveError(_ error: SocketError)
-    func socketDidReceivePong()
-}
-
-/// Protocolo que define cómo emitir eventos personalizados
-public protocol SocketEventEmitter {
-    func emit(event: SocketUserEvent, data: CodableValue)
-}
-
-/// Protocolo que define cómo registrar eventos
-public protocol SocketEventListener {
-    func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void)
-}
-
-/// Errores posibles que puede emitir el cliente socket
-public enum SocketError: Error {
-    case encodingFailed(reason: String)
-    case decodingFailed(event: String, reason: String)
-    case connectionFailed(reason: String)
-}
-
-/// Delegado nativo para manejar eventos estándar del socket como conexión, recepción de eventos, desconexión y errores
-public protocol NativeSocketDelegate: AnyObject {
     func socketDidConnect()
     func socketDidDisconnect(error: Error?)
     func socketDidReceive(event: String, data: Data)
     func socketDidCatchError(_ error: Error)
+    func socketDidReceivePong()
 }
 
-/// Protocolo para manejar errores desde el cliente socket
+/// Protocolo que define cómo emitir eventos personalizados (tipo socket.emit)
+public protocol SocketEventEmitter {
+    func emit(event: SocketUserEvent, data: CodableValue)
+}
+
+/// Protocolo que define cómo registrar listeners para eventos personalizados (tipo socket.on)
+public protocol SocketEventListener {
+    func on(event: SocketUserEvent, callback: @escaping (CodableValue) -> Void)
+}
+
+/// Protocolo para manejo explícito de errores internos del socket
 public protocol SocketErrorHandler: AnyObject {
     func socketDidCatchError(_ error: SocketError)
 }
 
-/// Protocolo base que define las operaciones estándar de un cliente de socket
+/// Protocolo base que define las operaciones estándar de un cliente socket compatible con socket.io
 public protocol NativeSocketClient {
     func connect(with userId: String?)
     func disconnect()
@@ -56,5 +42,12 @@ public protocol NativeSocketClient {
     var isConnected: Bool { get }
 }
 
-/// Protocolo combinado que unifica todas las capacidades del cliente de socket
+/// Protocolo combinado que unifica todas las capacidades del cliente de socket (emitir, escuchar, manejar errores)
 public typealias FullSocketClient = NativeSocketClient & SocketEventEmitter & SocketEventListener & SocketErrorHandler
+
+/// Errores posibles que puede emitir el cliente socket
+public enum SocketError: Error {
+    case encodingFailed(reason: String)
+    case decodingFailed(event: String, reason: String)
+    case connectionFailed(reason: String)
+}

@@ -56,6 +56,29 @@ public struct SocketMessage: Codable, CustomStringConvertible {
     }
 }
 
+/// Representa un mensaje con ACK opcional (ej: 42["event", {...}],1)
+public struct AckMessage: Codable {
+    public let message: SocketMessage
+    public let ackId: Int?
+
+    public init(message: SocketMessage, ackId: Int? = nil) {
+        self.message = message
+        self.ackId = ackId
+    }
+}
+
+/// Utilidad para convertir cualquier valor codificable en CodableValue
+public extension CodableValue {
+    static func from<T: Encodable>(_ value: T) -> CodableValue? {
+        do {
+            let data = try JSONEncoder().encode(value)
+            return try JSONDecoder().decode(CodableValue.self, from: data)
+        } catch {
+            return nil
+        }
+    }
+}
+
 /// Payload de un mensaje de chat simple
 public struct ChatMessage: Codable {
     public let groupId: Int
@@ -119,4 +142,10 @@ public enum CodableValue: Codable {
         case .null: try container.encodeNil()
         }
     }
+}
+
+struct SocketParsedMessage {
+    let code: Int
+    let event: String?
+    let data: CodableValue?
 }

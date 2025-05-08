@@ -5,6 +5,8 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     
     private var messageQueue: [String] = []
     private var reconnectDelay: TimeInterval = 2.0
+    private var reconnectAttempts: Int = 0
+    private let maxReconnectDelay: TimeInterval = 30
 
     private var webSocket: URLSessionWebSocketTask?
     private let serverURL: URL
@@ -48,6 +50,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         self.pendingUserId = authUserId
     }
     public func connect(with userId: String?) {
+        pendingUserId = userId
         var request = URLRequest(url: serverURL)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
@@ -63,11 +66,6 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
         startPing()
-        if lastConnectionEvent != .connected && !hasConnectedOnce {
-            hasConnectedOnce = true
-            lastConnectionEvent = .connected
-            onEvent?(.connected)
-        }
         flushQueue()
         listen()
     }
@@ -79,7 +77,9 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
             onEvent?(.disconnected)
         }
         webSocket?.cancel(with: .normalClosure, reason: nil)
+        webSocket = nil
         isConnected = false
+        reconnectAttempts = 0
     }
 
     public func emit(event: SocketUserEvent, data: CodableValue) {
@@ -155,6 +155,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
                 lastConnectionEvent = .connected
                 isConnected = true
                 onEvent?(.connected)
+                reconnectAttempts = 0
 
             case "__disconnected":
                 guard lastConnectionEvent != .disconnected else { return }
@@ -209,9 +210,11 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
     @MainActor
     private func scheduleReconnect() {
+        reconnectAttempts += 1
+        reconnectDelay = min(pow(2.0, Double(reconnectAttempts)), maxReconnectDelay)
         DispatchQueue.main.asyncAfter(deadline: .now() + reconnectDelay) {
+            print("🔁 Intentando reconectar...")
             self.connect(with: self.pendingUserId)
-            self.reconnectDelay = min(self.reconnectDelay * 2, 30)
         }
     }
 }
