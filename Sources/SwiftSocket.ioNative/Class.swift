@@ -59,19 +59,29 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     }
     public func connect(with userId: String?) {
         pendingUserId = userId
-        var request = URLRequest(url: serverURL)
+
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            log("❌ URL inválida")
+            return
+        }
+
+        components.path = path
+        var query = queryItems
+        if let userId = userId {
+            query.append(URLQueryItem(name: "auth[userId]", value: userId))
+        }
+        components.queryItems = query
+
+        guard let url = components.url else {
+            log("❌ No se pudo construir la URL final")
+            return
+        }
+
+        log("📡 Conectando con userId: \(userId ?? "nil") a URL: \(url)")
+
+        var request = URLRequest(url: url)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 30
-
-        log("📡 Conectando con userId: \(userId ?? "nil") a URL: \(serverURL)")
-
-        if let userId = userId {
-            let authPayload = ["userId": userId]
-            if let jsonData = try? JSONSerialization.data(withJSONObject: authPayload),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                request.addValue(jsonString, forHTTPHeaderField: "auth")
-            }
-        }
 
         webSocket = session.webSocketTask(with: request)
         webSocket?.resume()
@@ -95,7 +105,8 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     public func emit(event: SocketUserEvent, data: CodableValue) {
         log("📤 Emitiendo evento: \(event.name) con datos: \(data)")
         do {
-            let message = try SocketMessage(event: event.name, data: data).encodedString()
+            let payloadData = try data.encodedJSONString()
+            let message = "42[\"\(event.name)\",\(payloadData)]"
             if isConnected {
                 webSocket?.send(.string(message)) { error in
                     if let error = error {
