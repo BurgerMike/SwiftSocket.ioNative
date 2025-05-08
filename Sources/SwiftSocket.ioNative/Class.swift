@@ -106,7 +106,11 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
         log("📤 Emitiendo evento: \(event.name) con datos: \(data)")
         do {
             let payloadData = try data.encodedJSONString()
-            let message = "42[\"\(event.name)\",\(payloadData)]"
+            let eventNameJSON = try JSONEncoder().encode([event.name])
+            guard let eventArrayPrefix = String(data: eventNameJSON, encoding: .utf8)?.dropLast() else {
+                throw NSError(domain: "Emit", code: 1, userInfo: [NSLocalizedDescriptionKey: "No se pudo codificar el nombre del evento"])
+            }
+            let message = "42" + eventArrayPrefix + "," + payloadData + "]"
             if isConnected {
                 webSocket?.send(.string(message)) { error in
                     if let error = error {
