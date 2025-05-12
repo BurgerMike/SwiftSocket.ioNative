@@ -54,4 +54,9 @@ public enum SocketUserEvent: Hashable, CustomStringConvertible, Codable, RawRepr
         default: return true
         }
     }
+    
+    static func named(_ name: String) -> SocketUserEvent {
+        return .custom(name)
+    }
 }
+
