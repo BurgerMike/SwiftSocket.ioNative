@@ -54,6 +54,39 @@ public struct SocketMessage: Codable, CustomStringConvertible {
     public var description: String {
         return "📨 SocketMessage(event: \(event), data: \(data))"
     }
+
+}
+
+public extension CodableValue {
+    var stringValue: String? {
+        if case let .string(value) = self { return value }
+        return nil
+    }
+
+    var intValue: Int? {
+        if case let .int(value) = self { return value }
+        return nil
+    }
+
+    var doubleValue: Double? {
+        if case let .double(value) = self { return value }
+        return nil
+    }
+
+    var boolValue: Bool? {
+        if case let .bool(value) = self { return value }
+        return nil
+    }
+
+    var dictionaryValue: [String: CodableValue]? {
+        if case let .dictionary(value) = self { return value }
+        return nil
+    }
+
+    var arrayValue: [CodableValue]? {
+        if case let .array(value) = self { return value }
+        return nil
+    }
 }
 
 /// Representa un mensaje con ACK opcional (ej: 42["event", {...}],1)
