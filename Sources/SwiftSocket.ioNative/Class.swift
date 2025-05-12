@@ -71,6 +71,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
     private let path: String
     private let queryItems: [URLQueryItem]
     
+    public var onAnyHandler: ((String, CodableValue) -> Void)?
 
     public init(id: Int, baseURL: URL, path: String, queryItems: [URLQueryItem], authUserId: String? = nil) {
         self.id = id
@@ -227,6 +228,7 @@ public final class SwiftNativeSocketIOClient: NativeSocketClient {
 
             default:
                 eventHandler.trigger(event: message.event, with: message.data)
+                onAnyHandler?(message.event, message.data)
             }
 
         } catch {
