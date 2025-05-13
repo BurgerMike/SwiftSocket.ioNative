@@ -1,0 +1,189 @@
+
+# SwiftSocket.ioNative
+
+**SwiftSocket.ioNative** es un cliente 100% nativo en Swift que replica las funciones clave de `socket.io-client`, compatible con cualquier servidor `socket.io`, incluyendo rutas personalizadas, autenticación con `userId`, eventos `emit/on`, ACKs, y reconexión automática.
+
+Ideal para conectar apps iOS/macOS con backends Node.js, NestJS u otros que utilicen `socket.io`.
+
+---
+
+## 🚀 Características
+
+- 🔌 Conexión WebSocket nativa (`URLSessionWebSocketTask`)
+- 🛣 Soporte para rutas como `/QA/chat/socket`
+- 🔐 Autenticación con `userId`
+- 📤 Envío de eventos con `emit(event:data:)`
+- 📥 Escucha de eventos con `on(event:)`
+- ✅ Soporte para ACKs (confirmaciones)
+- 🧠 `on<T: Decodable>` para recibir objetos tipados
+- 🔁 Reconexión automática
+- 🧪 Pruebas con Swift Testing (Swift 5.9+)
+
+---
+
+## 📦 Instalación
+
+Agrega a tu `Package.swift`:
+
+```swift
+.package(url: "https://github.com/tuusuario/SwiftSocket.ioNative.git", from: "1.0.0")
+```
+
+Y en tu target:
+
+```swift
+.target(
+  name: "TuModulo",
+  dependencies: ["SwiftSocket.ioNative"]
+)
+```
+
+---
+
+## 📐 Uso Básico
+
+```swift
+let socket = SwiftNativeSocketIOClient(
+    baseURL: URL(string: "wss://tu-servidor.com")!,
+    path: "/QA/chat/socket",
+    userId: "usuario123"
+)
+
+socket.connect()
+
+socket.emit(event: "sendMessage", data: ["text": "Hola"])
+
+socket.on(event: "receiveMessage") { any in
+    print("📥 Datos recibidos:", any)
+}
+```
+
+---
+
+## 🧠 Recepción de objetos tipados
+
+```swift
+struct ChatMessage: Codable {
+    let text: String
+    let sender: String
+}
+
+socket.on(event: "receiveMessage", decodeTo: ChatMessage.self) { mensaje in
+    print("📩 \(mensaje.sender): \(mensaje.text)")
+}
+```
+
+---
+
+## ✅ Confirmaciones (ACKs)
+
+```swift
+socket.emit(event: "sendMessage", data: ["text": "Hola"]) { respuesta in
+    print("🔁 Confirmación del servidor:", respuesta ?? "nula")
+}
+```
+
+---
+
+## 🧪 Testing (Swift Testing)
+
+### Requisitos
+
+- Swift 5.9+
+- Xcode 15.3 o superior (o Xcode 16 beta)
+- Soporte para `#expect`, `@Suite`, `@Test`
+
+### Variable de entorno
+
+Este paquete usa una variable `SOCKET_SERVER_URL` para permitir tests en servidores reales o locales.
+
+```bash
+SOCKET_SERVER_URL=wss://tu-servidor.ngrok.app swift test
+```
+
+O en Xcode:
+
+- **Edit Scheme > Test > Arguments > Environment Variables**
+  - Name: `SOCKET_SERVER_URL`
+  - Value: `wss://tu-servidor.ngrok.app`
+
+---
+
+### Ejemplo de test
+
+```swift
+@Suite
+struct SwiftNativeSocketIOClientTests {
+    struct MockMessage: Codable, Equatable {
+        let text: String
+        let sender: String
+    }
+
+    @Test("Emit con ACK")
+    func testEmitAck() async throws {
+        let url = ProcessInfo.processInfo.environment["SOCKET_SERVER_URL"] ?? "wss://localhost"
+        let socket = SwiftNativeSocketIOClient(
+            baseURL: URL(string: url)!,
+            path: "/QA/chat/socket",
+            userId: "tester"
+        )
+
+        try await withCheckedThrowingContinuation { cont in
+            socket.connect()
+            Task {
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+                socket.emit(event: "sendMessage", data: MockMessage(text: "Hola", sender: "SwiftTest")) { _ in
+                    cont.resume()
+                }
+            }
+        }
+
+        #expect(true)
+    }
+}
+```
+
+---
+
+## 📁 Estructura del paquete
+
+```
+Sources/
+└── SwiftSocket.ioNative/
+    ├── SwiftNativeSocketIOClient.swift
+    ├── SocketEvent.swift
+    ├── AckManager.swift
+    ├── ReconnectManager.swift
+    └── Protocols.swift
+
+Tests/
+└── SwiftSocketIONativeTests/
+    └── SwiftNativeSocketIOClientTests.swift
+```
+
+---
+
+## 🧩 Requisitos
+
+- Swift 5.9+
+- iOS 14+, macOS 13+, tvOS 14+
+- Xcode 15.3 o superior (Xcode 16 recomendado para Swift Testing)
+
+---
+
+## 📄 Licencia
+
+Este proyecto está bajo licencia MIT. Consulta [LICENSE](./LICENSE) para más detalles.
+
+---
+
+## 🤝 Contribuciones
+
+¡Pull requests y mejoras bienvenidas!
+Este paquete busca evolucionar hasta cubrir el 100% del comportamiento de `socket.io-client`, pero con API nativa de Swift, cero dependencias externas y soporte multiplataforma Apple.
+
+---
+
+## 💬 Contacto
+
+Para sugerencias, dudas o mejoras, puedes abrir un issue en el repositorio o contribuir directamente.
