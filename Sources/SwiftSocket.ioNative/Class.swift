@@ -77,6 +77,7 @@ public final class SwiftSocketIOClient: SocketClient {
     private let eventRouter = EventRouter()
     private let ackManager = AckManager()
     private let auth: [String: String]?
+    private let path: String
     
     private var usePing: Bool = false
     private var pingInterval: TimeInterval = 10
@@ -87,11 +88,13 @@ public final class SwiftSocketIOClient: SocketClient {
     
     public init(
         url: URL,
+        path: String = "",
         auth: [String: String]? = nil,
         usePing: Bool = false,
         pingInterval: TimeInterval = 10
     ) {
         self.url = url
+        self.path = path
         self.auth = auth
         self.usePing = usePing
         self.pingInterval = pingInterval
@@ -104,7 +107,7 @@ public final class SwiftSocketIOClient: SocketClient {
     }
     
     public func connect() {
-        var urlComponents = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        var urlComponents = URLComponents(url: url.appendingPathComponent(path), resolvingAgainstBaseURL: false)
         if let auth = auth {
             urlComponents?.queryItems = auth.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
