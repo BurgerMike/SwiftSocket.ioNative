@@ -47,7 +47,7 @@ final class EventRouter {
     init() {}
 
     /// Registra un callback para un evento específico.
-    func on(_ event: String, callback: @escaping (CodableValue?) -> Void) {
+    func on(_ event: String, callback: @Sendable @escaping (CodableValue?) -> Void) {
         listeners[event, default: []].append(callback)
     }
 
