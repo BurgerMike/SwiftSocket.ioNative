@@ -86,6 +86,8 @@ public final class SwiftSocketIOClient: SocketClient {
     private var printedMessageIds = Set<String>()
     private let maxLoggedMessages = 100
     
+    public var debugMode: Bool = false
+    
     public init(
         url: URL,
         path: String = "",
@@ -153,11 +155,15 @@ public final class SwiftSocketIOClient: SocketClient {
             let messageData = try JSONEncoder().encode(socketEvent)
             webSocketTask?.send(.data(messageData)) { error in
                 if let error = error {
-                    print("❌ Error al enviar mensaje:", error)
+                    if self.debugMode {
+                        print("❌ Error al enviar mensaje:", error)
+                    }
                 }
             }
         } catch {
-            print("❌ No se pudo codificar SocketEvent")
+            if debugMode {
+                print("❌ No se pudo codificar SocketEvent")
+            }
         }
     }
     
@@ -197,7 +203,9 @@ public final class SwiftSocketIOClient: SocketClient {
                 default: break
                 }
             case .failure(let error):
-                print("❌ Error al recibir mensaje:", error)
+                if self.debugMode {
+                    print("❌ Error al recibir mensaje:", error)
+                }
             }
         }
     }
